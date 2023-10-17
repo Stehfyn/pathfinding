@@ -1,3 +1,5 @@
+use super::MAX_WRAP;
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -7,6 +9,27 @@ pub struct TemplateApp {
 
     #[serde(skip)] // This how you opt-out of serialization of a field
     value: f32,
+
+    #[serde(skip)]
+    top_panel_font_size: f32,
+    #[serde(skip)]
+    top_panel_sep_width: f32,
+    #[serde(skip)]
+    top_panel_rects: Vec<egui::Rect>,
+    #[serde(skip)]
+    top_panel_height: f32,
+
+    demo_settings_open: bool,
+    demo_settings_label: String,
+
+    demo_open: bool,
+    demo_label: String,
+
+    about_open: bool,
+    about_label: String,
+
+    app_settings_open: bool,
+    app_settings_label: String,
 }
 
 impl Default for TemplateApp {
@@ -15,6 +38,22 @@ impl Default for TemplateApp {
             // Example stuff:
             label: "Hello World!".to_owned(),
             value: 2.7,
+            top_panel_font_size: 20.0,
+            top_panel_sep_width: 0.0,
+            top_panel_rects: Vec::default(),
+            top_panel_height: 40.,
+
+            demo_settings_open: false,
+            demo_settings_label: "⌨ Settings".to_owned(),
+
+            demo_open: false,
+            demo_label: "🧮 Demo".to_owned(),
+
+            about_open: false,
+            about_label: "📖 About".to_owned(),
+
+            app_settings_open: false,
+            app_settings_label: "⚙".to_owned(),
         }
     }
 }
@@ -45,24 +84,8 @@ impl eframe::App for TemplateApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
-
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
-
-            egui::menu::bar(ui, |ui| {
-                #[cfg(not(target_arch = "wasm32"))] // no File->Quit on web pages!
-                {
-                    ui.menu_button("File", |ui| {
-                        if ui.button("Quit").clicked() {
-                            _frame.close();
-                        }
-                    });
-                    ui.add_space(16.0);
-                }
-
-                egui::widgets::global_dark_light_mode_buttons(ui);
-            });
-        });
+        ctx.request_repaint();
+        self.top_panel(ctx, _frame);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
@@ -90,6 +113,182 @@ impl eframe::App for TemplateApp {
                 egui::warn_if_debug_build(ui);
             });
         });
+    }
+}
+
+impl TemplateApp {
+    fn top_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::top("top_panel")
+            .exact_height(self.calc_top_panel_button_height())
+            .show(ctx, |ui| {
+                egui::menu::bar(ui, |ui| {
+                    // calc button dimensions:
+                    self.calc_top_panel_button_rects(ui);
+                    let bw = self.calc_top_panel_button_widths(ui);
+                    let bh = self.calc_top_panel_button_height();
+                    let offset = (ctx.screen_rect().width() - bw) / 2.;
+
+                    ui.add_space(offset);
+                    let mut button_text = "☀";
+                    if ui.visuals().dark_mode {
+                        button_text = "🌙";
+                    }
+
+                    let mut style = (*ctx.style()).clone();
+                    style.text_styles = [(
+                        egui::TextStyle::Button,
+                        egui::FontId::new(18.0, egui::FontFamily::Proportional),
+                    )]
+                    .into();
+                    ui.style_mut().text_styles = style.text_styles;
+
+                    if ui
+                        .add_sized(
+                            [self.top_panel_rects[0].width(), bh],
+                            egui::Button::new(button_text),
+                        )
+                        .clicked()
+                    {
+                        let visuals = if ui.visuals().dark_mode {
+                            egui::Visuals::light()
+                        } else {
+                            egui::Visuals::dark()
+                        };
+                        ctx.set_visuals(visuals);
+                    }
+                    ui.add(egui::Separator::default().spacing(self.top_panel_sep_width));
+                    if ui
+                        .add_sized(
+                            [self.top_panel_rects[1].width(), bh],
+                            egui::SelectableLabel::new(
+                                self.demo_settings_open,
+                                self.demo_settings_label.clone(),
+                            ),
+                        )
+                        .clicked()
+                    {
+                        self.demo_open = !self.demo_open;
+                    }
+                    if ui
+                        .add_sized(
+                            [self.top_panel_rects[2].width(), bh],
+                            egui::SelectableLabel::new(self.demo_open, self.demo_label.clone()),
+                        )
+                        .clicked()
+                    {
+                        self.demo_open = true;
+                    }
+                    if ui
+                        .add_sized(
+                            [self.top_panel_rects[3].width(), bh],
+                            egui::SelectableLabel::new(self.about_open, self.about_label.clone()),
+                        )
+                        .clicked()
+                    {
+                        self.about_open = !self.about_open;
+                    }
+
+                    ui.add(egui::Separator::default().spacing(self.top_panel_sep_width));
+
+                    ui.scope(|ui| {
+                        if ui
+                            .add_sized(
+                                [self.top_panel_rects[4].width(), bh],
+                                egui::SelectableLabel::new(
+                                    self.app_settings_open,
+                                    self.app_settings_label.clone(),
+                                ),
+                            )
+                            .clicked()
+                        {
+                            self.app_settings_open = !self.app_settings_open;
+                        }
+                    });
+                });
+            });
+    }
+
+    fn calc_top_panel_button_rects(&mut self, ui: &egui::Ui) {
+        self.top_panel_rects.clear();
+
+        self.top_panel_rects.push(
+            ui.painter()
+                .layout(
+                    "☀".to_owned(),
+                    egui::FontId::new(self.top_panel_font_size, egui::FontFamily::Proportional),
+                    egui::Color32::default(),
+                    MAX_WRAP,
+                )
+                .rect,
+        );
+
+        self.top_panel_rects.push(
+            ui.painter()
+                .layout(
+                    self.demo_settings_label.clone(),
+                    egui::FontId::new(self.top_panel_font_size, egui::FontFamily::Proportional),
+                    egui::Color32::default(),
+                    MAX_WRAP,
+                )
+                .rect,
+        );
+
+        self.top_panel_rects.push(
+            ui.painter()
+                .layout(
+                    self.demo_label.clone(),
+                    egui::FontId::new(self.top_panel_font_size, egui::FontFamily::Proportional),
+                    egui::Color32::default(),
+                    MAX_WRAP,
+                )
+                .rect,
+        );
+
+        self.top_panel_rects.push(
+            ui.painter()
+                .layout(
+                    self.about_label.clone(),
+                    egui::FontId::new(self.top_panel_font_size, egui::FontFamily::Proportional),
+                    egui::Color32::default(),
+                    MAX_WRAP,
+                )
+                .rect,
+        );
+
+        self.top_panel_rects.push(
+            ui.painter()
+                .layout(
+                    self.app_settings_label.clone(),
+                    egui::FontId::new(self.top_panel_font_size, egui::FontFamily::Proportional),
+                    egui::Color32::default(),
+                    MAX_WRAP,
+                )
+                .rect,
+        );
+    }
+
+    fn calc_top_panel_button_widths(&mut self, ui: &egui::Ui) -> f32 {
+        let mut width = 0.;
+        let item_spacing_x = ui.style().spacing.item_spacing.x;
+        let button_padding_x = ui.style().spacing.button_padding.x;
+
+        for r in self.top_panel_rects.iter() {
+            width += r.width();
+            width += button_padding_x * 2.;
+            width += item_spacing_x;
+        }
+
+        width += item_spacing_x;
+
+        width
+    }
+
+    fn calc_top_panel_button_height(&mut self) -> f32 {
+        // Look at the tallest button
+        self.top_panel_rects
+            .iter()
+            .map(|r| r.height())
+            .fold(f32::NEG_INFINITY, |a, b| a.max(b))
     }
 }
 
