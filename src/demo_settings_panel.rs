@@ -1,52 +1,11 @@
+use crate::{
+    demo_panel::EnvironmentSettings, demo_panel::Generated, demo_panel::Obstacle, demo_panel::Stage,
+};
+
 use std::ops::RangeInclusive;
 
 use super::Panel;
 use super::MAX_WRAP;
-
-#[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
-pub enum Stage {
-    Minimal,
-    Office,
-    Generated,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
-pub enum Generated {
-    N(usize),
-}
-
-#[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
-pub enum Obstacle {
-    Rectangular(egui::Rect),
-    Circular(f32),
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)]
-pub struct EnvironmentSettings {
-    pub stage: Stage,
-    pub n: Generated,
-    pub obstacle: Obstacle,
-    pub width: f32,
-    pub height: f32,
-    pub radius: f32,
-}
-
-impl Default for EnvironmentSettings {
-    fn default() -> Self {
-        Self {
-            stage: Stage::Generated,
-            n: Generated::N(20 as usize),
-            obstacle: Obstacle::Rectangular(egui::Rect::from_x_y_ranges(
-                RangeInclusive::new(0., 5.),
-                RangeInclusive::new(0., 5.),
-            )),
-            width: 5.,
-            height: 5.,
-            radius: 2.5,
-        }
-    }
-}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -202,6 +161,12 @@ impl Panel for DemoSettingsPanel {
     }
     #[allow(unused)]
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {}
+}
+
+impl DemoSettingsPanel {
+    pub fn get_env_settings(&self) -> EnvironmentSettings {
+        self.env_settings
+    }
 }
 
 impl DemoSettingsPanel {

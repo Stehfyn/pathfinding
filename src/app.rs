@@ -78,6 +78,8 @@ impl Pathfinding {
         self.demo_settings_panel.update(ctx, _frame);
     }
     fn demo_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.demo_panel
+            .set_env_settings(self.demo_settings_panel.get_env_settings());
         self.demo_panel.update(ctx, _frame);
     }
 }
