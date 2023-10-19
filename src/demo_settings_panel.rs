@@ -90,11 +90,7 @@ impl Panel for DemoSettingsPanel {
                         let mut n = self.env_settings.n;
                         ui.group(|ui| {
                             ui.vertical(|ui| {
-                                ui.radio_value(
-                                    &mut self.env_settings.stage,
-                                    Stage::Minimal,
-                                    "Minimal",
-                                );
+                                ui.radio_value(&mut self.env_settings.stage, Stage::AStar, "A*");
                                 ui.radio_value(
                                     &mut self.env_settings.stage,
                                     Stage::Office,
@@ -132,17 +128,82 @@ impl Panel for DemoSettingsPanel {
                                         });
                                     ui.radio_value(
                                         &mut self.env_settings.obstacle,
-                                        Obstacle::Rectangular(egui::Rect::from_x_y_ranges(
-                                            RangeInclusive::new(0., self.env_settings.width),
-                                            RangeInclusive::new(0., self.env_settings.height),
-                                        )),
+                                        Obstacle::Rectangular,
                                         "Rectangular",
                                     );
+                                    ui.scope(|ui| {
+                                        match self.env_settings.obstacle {
+                                            Obstacle::Rectangular => {
+                                                ui.set_enabled(true);
+                                            }
+                                            _ => ui.set_enabled(false),
+                                        }
+
+                                        ui.add(
+                                            egui::Slider::new(
+                                                &mut self.env_settings.rect_side_min,
+                                                0f32..=8f32,
+                                            )
+                                            .clamp_to_range(true)
+                                            .smart_aim(true)
+                                            .step_by(1.)
+                                            .trailing_fill(true),
+                                        );
+                                        self.env_settings.rect_side_min = self
+                                            .env_settings
+                                            .rect_side_min
+                                            .clamp(0f32, self.env_settings.rect_side_max - 0.5f32);
+                                        ui.add(
+                                            egui::Slider::new(
+                                                &mut self.env_settings.rect_side_max,
+                                                (self.env_settings.rect_side_min + 1f32)..=10f32,
+                                            )
+                                            .clamp_to_range(true)
+                                            .smart_aim(true)
+                                            .step_by(1.)
+                                            .trailing_fill(true),
+                                        );
+                                    });
                                     ui.radio_value(
                                         &mut self.env_settings.obstacle,
-                                        Obstacle::Circular(self.env_settings.radius),
+                                        Obstacle::Circular,
                                         "Circular",
                                     );
+                                    ui.scope(|ui| {
+                                        match self.env_settings.obstacle {
+                                            Obstacle::Circular => {
+                                                ui.set_enabled(true);
+                                            }
+                                            _ => ui.set_enabled(false),
+                                        }
+
+                                        ui.add(
+                                            egui::Slider::new(
+                                                &mut self.env_settings.circle_radius_min,
+                                                0f32..=8f32,
+                                            )
+                                            .clamp_to_range(true)
+                                            .smart_aim(true)
+                                            .step_by(1.)
+                                            .trailing_fill(true),
+                                        );
+                                        self.env_settings.circle_radius_min =
+                                            self.env_settings.circle_radius_min.clamp(
+                                                0f32,
+                                                self.env_settings.circle_radius_max - 0.5f32,
+                                            );
+                                        ui.add(
+                                            egui::Slider::new(
+                                                &mut self.env_settings.circle_radius_max,
+                                                (self.env_settings.circle_radius_min + 1f32)
+                                                    ..=10f32,
+                                            )
+                                            .clamp_to_range(true)
+                                            .smart_aim(true)
+                                            .step_by(1.)
+                                            .trailing_fill(true),
+                                        );
+                                    });
                                 });
                             });
                         });

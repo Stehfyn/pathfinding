@@ -7,7 +7,7 @@ use std::ops::RangeInclusive;
 
 #[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
 pub enum Stage {
-    Minimal,
+    AStar,
     Office,
     Generated,
 }
@@ -19,8 +19,24 @@ pub enum Generated {
 
 #[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
 pub enum Obstacle {
-    Rectangular(egui::Rect),
-    Circular(f32),
+    Rectangular,
+    Circular,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct AStarStageSettings {
+    pub red_notch_size: f32,
+    pub blue_notch_size: f32,
+}
+
+impl Default for AStarStageSettings {
+    fn default() -> Self {
+        Self {
+            red_notch_size: 3.,
+            blue_notch_size: 2.,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
@@ -29,9 +45,13 @@ pub struct EnvironmentSettings {
     pub stage: Stage,
     pub n: Generated,
     pub obstacle: Obstacle,
-    pub width: f32,
-    pub height: f32,
-    pub radius: f32,
+
+    pub a_star_stage_settings: AStarStageSettings,
+
+    pub rect_side_min: f32,
+    pub rect_side_max: f32,
+    pub circle_radius_min: f32,
+    pub circle_radius_max: f32,
 }
 
 impl Default for EnvironmentSettings {
@@ -39,13 +59,12 @@ impl Default for EnvironmentSettings {
         Self {
             stage: Stage::Generated,
             n: Generated::N(20 as usize),
-            obstacle: Obstacle::Rectangular(egui::Rect::from_x_y_ranges(
-                RangeInclusive::new(0., 5.),
-                RangeInclusive::new(0., 5.),
-            )),
-            width: 5.,
-            height: 5.,
-            radius: 2.5,
+            obstacle: Obstacle::Rectangular,
+            a_star_stage_settings: AStarStageSettings::default(),
+            rect_side_min: 4.,
+            rect_side_max: 5.,
+            circle_radius_min: 2.,
+            circle_radius_max: 3.,
         }
     }
 }
@@ -89,6 +108,8 @@ pub struct DemoPanel {
     hovered_points: Vec<[f64; 2]>,
     generate: bool,
     obstacles: Vec<ShapeParams>,
+    stretch: bool,
+    first_frame: bool,
 }
 
 impl Default for DemoPanel {
@@ -113,6 +134,8 @@ impl Default for DemoPanel {
             hovered_points: Vec::new(),
             generate: false,
             obstacles: Vec::new(),
+            first_frame: true,
+            stretch: true,
         }
     }
 }
@@ -182,6 +205,18 @@ impl DemoPanel {
             let mut x: i32 = 0;
             let mut y: i32 = 0;
 
+            if !self.first_frame && self.stretch {
+                self.stretch_grid_x_boundaries(plot_ui);
+                self.stretch = false;
+            }
+
+            if self.first_frame {
+                self.first_frame = false;
+            }
+
+            //draw grid
+            self.grid_boundaries(plot_ui);
+
             if let Some(point) = plot_ui.pointer_coordinate() {
                 x = point.x as i32;
                 y = point.y as i32;
@@ -199,11 +234,16 @@ impl DemoPanel {
                     Generated::N(n) => {
                         for _ in 0..n {
                             match self.env_settings.obstacle {
-                                Obstacle::Circular(r) => {
-                                    let center_x = rand::thread_rng().gen_range(0..100) as f64;
+                                Obstacle::Circular => {
+                                    let center_x = rand::thread_rng().gen_range(
+                                        (self.grid.min.x as i32)..(self.grid.max.x as i32),
+                                    ) as f64;
                                     let center_y = rand::thread_rng().gen_range(0..100) as f64;
-                                    let radius_x = r;
-                                    let radius_y = r;
+                                    let radius_x = rand::thread_rng().gen_range(
+                                        self.env_settings.circle_radius_min
+                                            ..self.env_settings.circle_radius_max,
+                                    ) as f64;
+                                    let radius_y = radius_x;
 
                                     let circle_params = CircleParams {
                                         center_x: center_x as f64,
@@ -214,11 +254,19 @@ impl DemoPanel {
 
                                     self.obstacles.push(ShapeParams::Circle(circle_params));
                                 }
-                                Obstacle::Rectangular(r) => {
-                                    let center_x = rand::thread_rng().gen_range(0..100) as f64;
+                                Obstacle::Rectangular => {
+                                    let center_x = rand::thread_rng().gen_range(
+                                        (self.grid.min.x as i32)..(self.grid.max.x as i32),
+                                    ) as f64;
                                     let center_y = rand::thread_rng().gen_range(0..100) as f64;
-                                    let width = r.width();
-                                    let height = r.height();
+                                    let width = rand::thread_rng().gen_range(
+                                        self.env_settings.rect_side_min
+                                            ..self.env_settings.rect_side_max,
+                                    ) as f64;
+                                    let height = rand::thread_rng().gen_range(
+                                        self.env_settings.rect_side_min
+                                            ..self.env_settings.rect_side_max,
+                                    ) as f64;
 
                                     let rect_params = RectParams {
                                         center_x: center_x,
@@ -235,20 +283,30 @@ impl DemoPanel {
                 }
             }
 
-            for obs in self.obstacles.iter() {
-                match obs {
-                    ShapeParams::Circle(cp) => {
-                        let circle = self.create_circle(cp.center_x, cp.center_y, cp.radius_y);
-                        plot_ui.polygon(circle);
-                    }
-                    ShapeParams::Rectangle(rp) => {
-                        let rect =
-                            self.create_rectangle(rp.center_x, rp.center_y, rp.width, rp.height);
-                        for line in rect {
-                            plot_ui.line(line);
+            if !(self.env_settings.stage == Stage::Office)
+                && !(self.env_settings.stage == Stage::AStar)
+            {
+                for obs in self.obstacles.iter() {
+                    match obs {
+                        ShapeParams::Circle(cp) => {
+                            let circle = self.create_circle(cp.center_x, cp.center_y, cp.radius_y);
+                            plot_ui.polygon(circle);
+                        }
+                        ShapeParams::Rectangle(rp) => {
+                            let rect = self.create_rectangle(
+                                rp.center_x,
+                                rp.center_y,
+                                rp.width,
+                                rp.height,
+                            );
+                            for line in rect {
+                                plot_ui.line(line);
+                            }
                         }
                     }
                 }
+            } else if self.env_settings.stage == Stage::AStar {
+                self.a_star_stage(plot_ui);
             }
 
             let dist = plot_ui
@@ -262,6 +320,47 @@ impl DemoPanel {
 }
 
 impl DemoPanel {
+    fn a_star_stage(&mut self, plot_ui: &mut egui_plot::PlotUi) {
+        // red
+        let p1r = [30f64, 41f64];
+        let p2r = [39f64, 41f64];
+        let p3r = [41f64, 49f64];
+        let p4r = [41f64, 41f64];
+        let p5r = [50f64, 41f64];
+        let p6r = [50f64, 40f64];
+        let p7r = [41f64, 40f64];
+        let p8r = [40f64, 37f64];
+        let p9r = [39f64, 37f64];
+        let p10r = [39f64, 40f64];
+        let p11r = [30f64, 40f64];
+        // left line
+
+        plot_ui.line(
+            egui_plot::Line::new(egui_plot::PlotPoints::new(vec![
+                p1r, p2r, p3r, p4r, p5r, p6r, p7r, p8r, p9r, p10r, p11r, p1r,
+            ]))
+            .color(egui::Color32::from_rgba_unmultiplied(255, 0, 0, 125))
+            .fill(40.),
+        );
+
+        // blue
+        let p1b = [50f64, 49f64];
+        let p2b = [41f64, 49f64];
+        let p3b = [39f64, 41f64];
+        let p4b = [39f64, 49f64];
+        let p5b = [30f64, 49f64];
+        let p6b = [30f64, 50f64];
+        let p7b = [50f64, 50f64];
+        // left line
+
+        plot_ui.line(
+            egui_plot::Line::new(egui_plot::PlotPoints::new(vec![
+                p1b, p2b, p3b, p4b, p5b, p6b, p7b, p1b,
+            ]))
+            .color(egui::Color32::from_rgba_unmultiplied(0, 0, 255, 125))
+            .fill(50.),
+        );
+    }
     fn calc_markers(&mut self, ui: &egui::Ui) -> Vec<egui_plot::Points> {
         self.base_points.clear();
         self.waypoint_points.clear();
@@ -342,6 +441,31 @@ impl DemoPanel {
             0.0..TAU,
             100,
         ))
+    }
+
+    fn stretch_grid_x_boundaries(&mut self, plot_ui: &mut egui_plot::PlotUi) {
+        self.grid.min.x = plot_ui.plot_bounds().min()[0] as f32;
+        self.grid.max.x = plot_ui.plot_bounds().max()[0] as f32;
+    }
+
+    fn grid_boundaries(&self, plot_ui: &mut egui_plot::PlotUi) {
+        let top_left = [self.grid.left() as f64, self.grid.top() as f64];
+        let top_right = [self.grid.right() as f64, self.grid.top() as f64];
+        let bottom_left = [self.grid.left() as f64, self.grid.bottom() as f64];
+        let bottom_right = [self.grid.right() as f64, self.grid.bottom() as f64];
+
+        plot_ui.line(
+            egui_plot::Line::new(egui_plot::PlotPoints::new(vec![
+                top_left,
+                top_right,
+                bottom_right,
+                bottom_left,
+                top_left,
+            ]))
+            .width(2.)
+            .color(egui::Color32::from_rgba_unmultiplied(125, 125, 125, 125))
+            .style(egui_plot::LineStyle::Dashed { length: 10. }),
+        );
     }
 
     fn generate_obstacles(&mut self) {}
