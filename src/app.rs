@@ -2,8 +2,8 @@ use eframe::App;
 
 use crate::{
     app_settings_panel::AppSettingsPanel, demo_panel::DemoPanel,
-    demo_settings_panel::DemoSettingsPanel, scene_hierarchy_panel::SceneHierarchyPanel,
-    top_panel::TopPanel, Panel,
+    demo_settings_panel::DemoSettingsPanel, entity_property_panel::EntityPropertyPanel,
+    scene_hierarchy_panel::SceneHierarchyPanel, top_panel::TopPanel, Panel,
 };
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -30,6 +30,9 @@ pub struct Pathfinding {
 
     #[serde(skip)]
     scene_hierarchy_panel: SceneHierarchyPanel,
+
+    #[serde(skip)]
+    entity_property_panel: EntityPropertyPanel,
 }
 
 impl Default for Pathfinding {
@@ -43,6 +46,7 @@ impl Default for Pathfinding {
             demo_panel: DemoPanel::default(),
             app_settings_panel: AppSettingsPanel::default(),
             scene_hierarchy_panel: SceneHierarchyPanel::default(),
+            entity_property_panel: EntityPropertyPanel::default(),
         }
     }
 }
@@ -80,6 +84,7 @@ impl eframe::App for Pathfinding {
         self.demo_panel(ctx, _frame);
         self.app_settings_panel(ctx, _frame);
         self.scene_hierarchy_panel(ctx, _frame);
+        self.entity_property_panel(ctx, _frame);
     }
 }
 
@@ -104,15 +109,19 @@ impl Pathfinding {
         self.app_settings_panel.open = self.top_panel.is_app_settings_open();
         self.app_settings_panel.update(ctx, _frame);
         if self.app_settings_panel.is_logger_open() {
-            egui::Window::new("Log").show(ctx, |ui| {
+            egui::Window::new("Log").title_bar(false).show(ctx, |ui| {
                 // draws the logger ui.
-                egui_logger::logger_ui(ui);
+                egui_logger::minimal_logger_ui(ui, egui::Color32::BLACK);
             });
         }
     }
     fn scene_hierarchy_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.scene_hierarchy_panel.open = self.top_panel.is_demo_settings_open();
+        self.scene_hierarchy_panel.open = true;
         self.scene_hierarchy_panel.update(ctx, _frame);
+    }
+    fn entity_property_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.entity_property_panel.open = true;
+        self.entity_property_panel.update(ctx, _frame);
     }
 }
 

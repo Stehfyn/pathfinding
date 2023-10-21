@@ -25,12 +25,11 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 once_cell = "1.18.0"
 lazy_static = "1.4.0"
-egui_logger = "0.4.0"
+egui_logger = { git = "https://github.com/Stehfyn/egui_logger", branch = "main" }
 
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-env_logger = "0.10"
 poll-promise = {version = "0.3.0", features = ["async-std"] }
 
 # web:

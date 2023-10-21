@@ -23,15 +23,15 @@ pub fn make_hierarchy_selectable(
 
     if response.clicked_by(egui::PointerButton::Primary) && ui.ctx().input(|i| i.raw.modifiers.ctrl)
     {
-        log::debug!("Ctrl + Left Click");
+        log::info!("Ctrl + Left Click");
         return Some(SelectionEvent::Add);
     }
     if response.double_clicked_by(egui::PointerButton::Primary) {
-        log::debug!("Double Click");
+        log::info!("Double Click");
         return Some(SelectionEvent::ToggleCollapse);
     }
     if response.clicked_by(egui::PointerButton::Primary) {
-        log::debug!("Select");
+        log::info!("Select");
         return Some(SelectionEvent::Change);
     }
     if response.hovered() {
@@ -255,6 +255,8 @@ pub struct SceneHierarchyPanel {
     scene_hierarchy: Tree,
     #[serde(skip)]
     label: String,
+    #[serde(skip)]
+    first_frame: bool,
 }
 
 impl Default for SceneHierarchyPanel {
@@ -266,6 +268,7 @@ impl Default for SceneHierarchyPanel {
             dimensions: egui::vec2(200., 400.),
             scene_hierarchy: Tree::default(),
             label: "Hierarchy".to_string(),
+            first_frame: true,
         }
     }
 }
@@ -279,11 +282,14 @@ impl Panel for SceneHierarchyPanel {
             )
             .fixed_pos((40., 40.))
             .fixed_size(self.dimensions)
-            //.title_bar(false)
-            .collapsible(true)
+            .collapsible(false)
             .show(ctx, |ui| {
                 self.scene_hierarchy_ui(ui);
             });
+
+            if self.first_frame {
+                self.first_frame = false;
+            }
         }
     }
     #[allow(unused)]
@@ -334,6 +340,15 @@ unsafe fn unselect_all() {
     }
 }
 
+pub unsafe fn get_selected() -> Vec<usize> {
+    let mut selected = Vec::new();
+    for (key, val) in ENTITY_HIERARCHY_SELECTED.iter_mut() {
+        if *val {
+            selected.push(*key);
+        }
+    }
+    selected
+}
 unsafe fn query_select(id: usize) -> bool {
     *ENTITY_HIERARCHY_SELECTED.get(&id).unwrap()
 }

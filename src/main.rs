@@ -6,6 +6,15 @@
 fn main() -> eframe::Result<()> {
     //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     egui_logger::init_with_max_level(log::LevelFilter::Debug).expect("Error initializing logger");
+    let log_color_map = egui_logger::LogColorMap::new(
+        egui::Color32::LIGHT_GREEN,
+        egui::Color32::from_rgb(0, 0, 255),   // Blue
+        egui::Color32::WHITE,                 // Green
+        egui::Color32::from_rgb(255, 165, 0), // Orange
+        egui::Color32::from_rgb(255, 0, 0),   // Red
+    );
+
+    egui_logger::set_log_color_map(log_color_map);
 
     let native_options = eframe::NativeOptions {
         initial_window_size: Some([400.0, 300.0].into()),
@@ -25,6 +34,15 @@ fn main() {
     // Redirect `log` message to `console.log` and friends:
     //eframe::WebLogger::init(log::LevelFilter::Debug).ok();
     egui_logger::init_with_max_level(log::LevelFilter::Debug).expect("Error initializing logger");
+    let log_color_map = egui_logger::LogColorMap::new(
+        egui::Color32::LIGHT_GREEN,
+        egui::Color32::from_rgb(0, 0, 255),   // Blue
+        egui::Color32::WHITE,                 // Green
+        egui::Color32::from_rgb(255, 165, 0), // Orange
+        egui::Color32::from_rgb(255, 0, 0),   // Red
+    );
+
+    egui_logger::set_log_color_map(log_color_map);
 
     let web_options = eframe::WebOptions::default();
 
