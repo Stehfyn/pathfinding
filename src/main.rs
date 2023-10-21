@@ -4,7 +4,8 @@
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    //env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    egui_logger::init_with_max_level(log::LevelFilter::Debug).expect("Error initializing logger");
 
     let native_options = eframe::NativeOptions {
         initial_window_size: Some([400.0, 300.0].into()),
@@ -22,7 +23,8 @@ fn main() -> eframe::Result<()> {
 #[cfg(target_arch = "wasm32")]
 fn main() {
     // Redirect `log` message to `console.log` and friends:
-    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+    //eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+    egui_logger::init_with_max_level(log::LevelFilter::Debug).expect("Error initializing logger");
 
     let web_options = eframe::WebOptions::default();
 

@@ -1,3 +1,5 @@
+use crate::fixed_demo_label;
+
 use super::Panel;
 use super::MAX_WRAP;
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -6,6 +8,8 @@ pub struct TopPanel {
     pub open: bool,
     #[serde(skip)]
     font_size: f32,
+    #[serde(skip)]
+    font_scale: f32,
     #[serde(skip)]
     sep_width: f32,
     #[serde(skip)]
@@ -38,9 +42,11 @@ pub struct TopPanel {
 
 impl Default for TopPanel {
     fn default() -> Self {
+        let fixed_demo_label = fixed_demo_label();
         Self {
             open: true,
             font_size: 20.0,
+            font_scale: 1.0,
             sep_width: 0.0,
             height: 40.0,
             widget_rects: Vec::default(),
@@ -50,7 +56,7 @@ impl Default for TopPanel {
             demo_settings_label: "🖧 Configure".to_owned(),
 
             demo_open: false,
-            demo_label: "🗺️Demo".to_owned(),
+            demo_label: fixed_demo_label,
 
             about_open: false,
             about_label: "📖 About".to_owned(),
@@ -81,7 +87,10 @@ impl Panel for TopPanel {
 
                     let mut style = (*ctx.style()).clone();
                     if let Some(text_style) = style.text_styles.get_mut(&egui::TextStyle::Button) {
-                        *text_style = egui::FontId::new(18.0, egui::FontFamily::Proportional); 
+                        *text_style = egui::FontId::new(
+                            self.font_size * self.font_scale,
+                            egui::FontFamily::Proportional,
+                        );
                     }
                     ui.style_mut().text_styles = style.text_styles;
 
@@ -113,18 +122,10 @@ impl Panel for TopPanel {
                         self.demo_settings_open = !self.demo_settings_open;
                     }
 
-                    let end_index = self
-                        .demo_label
-                        .char_indices()
-                        .nth(1)
-                        .map_or(self.demo_label.len(), |(i, _)| i);
-                    let mut sliced: String = self.demo_label[..end_index].to_string();
-                    sliced += " Demo";
-
                     if ui
                         .add_sized(
                             [self.widget_rects[2].width(), bh],
-                            egui::SelectableLabel::new(self.demo_open, sliced.clone()),
+                            egui::SelectableLabel::new(self.demo_open, self.demo_label.clone()),
                         )
                         .clicked()
                     {
@@ -167,6 +168,14 @@ impl TopPanel {
     pub fn is_demo_settings_open(&self) -> bool {
         self.demo_settings_open
     }
+
+    pub fn is_app_settings_open(&self) -> bool {
+        self.app_settings_open
+    }
+
+    pub fn set_font_scale(&mut self, scale: f32) {
+        self.font_scale = scale
+    }
 }
 impl TopPanel {
     fn calc_button_rects(&mut self, ui: &egui::Ui) {
@@ -176,7 +185,10 @@ impl TopPanel {
             ui.painter()
                 .layout(
                     "☀".to_owned(),
-                    egui::FontId::new(self.font_size, egui::FontFamily::Proportional),
+                    egui::FontId::new(
+                        self.font_size * self.font_scale,
+                        egui::FontFamily::Proportional,
+                    ),
                     egui::Color32::default(),
                     MAX_WRAP,
                 )
@@ -187,7 +199,10 @@ impl TopPanel {
             ui.painter()
                 .layout(
                     self.demo_settings_label.clone(),
-                    egui::FontId::new(self.font_size, egui::FontFamily::Proportional),
+                    egui::FontId::new(
+                        self.font_size * self.font_scale,
+                        egui::FontFamily::Proportional,
+                    ),
                     egui::Color32::default(),
                     MAX_WRAP,
                 )
@@ -198,7 +213,10 @@ impl TopPanel {
             ui.painter()
                 .layout(
                     self.demo_label.clone(),
-                    egui::FontId::new(self.font_size, egui::FontFamily::Proportional),
+                    egui::FontId::new(
+                        self.font_size * self.font_scale,
+                        egui::FontFamily::Proportional,
+                    ),
                     egui::Color32::default(),
                     MAX_WRAP,
                 )
@@ -209,7 +227,10 @@ impl TopPanel {
             ui.painter()
                 .layout(
                     self.about_label.clone(),
-                    egui::FontId::new(self.font_size, egui::FontFamily::Proportional),
+                    egui::FontId::new(
+                        self.font_size * self.font_scale,
+                        egui::FontFamily::Proportional,
+                    ),
                     egui::Color32::default(),
                     MAX_WRAP,
                 )
@@ -220,7 +241,10 @@ impl TopPanel {
             ui.painter()
                 .layout(
                     self.app_settings_label.clone(),
-                    egui::FontId::new(self.font_size, egui::FontFamily::Proportional),
+                    egui::FontId::new(
+                        self.font_size * self.font_scale,
+                        egui::FontFamily::Proportional,
+                    ),
                     egui::Color32::default(),
                     MAX_WRAP,
                 )
@@ -239,6 +263,7 @@ impl TopPanel {
             width += item_spacing_x;
         }
 
+        width += item_spacing_x;
         width += item_spacing_x;
 
         width

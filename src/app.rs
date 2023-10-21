@@ -1,5 +1,9 @@
+use eframe::App;
+
 use crate::{
-    demo_panel::DemoPanel, demo_settings_panel::DemoSettingsPanel, top_panel::TopPanel, Panel,
+    app_settings_panel::AppSettingsPanel, demo_panel::DemoPanel,
+    demo_settings_panel::DemoSettingsPanel, scene_hierarchy_panel::SceneHierarchyPanel,
+    top_panel::TopPanel, Panel,
 };
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -20,6 +24,12 @@ pub struct Pathfinding {
 
     #[serde(skip)]
     demo_panel: DemoPanel,
+
+    #[serde(skip)]
+    app_settings_panel: AppSettingsPanel,
+
+    #[serde(skip)]
+    scene_hierarchy_panel: SceneHierarchyPanel,
 }
 
 impl Default for Pathfinding {
@@ -31,6 +41,8 @@ impl Default for Pathfinding {
             top_panel: TopPanel::default(),
             demo_settings_panel: DemoSettingsPanel::default(),
             demo_panel: DemoPanel::default(),
+            app_settings_panel: AppSettingsPanel::default(),
+            scene_hierarchy_panel: SceneHierarchyPanel::default(),
         }
     }
 }
@@ -66,21 +78,41 @@ impl eframe::App for Pathfinding {
         self.top_panel(ctx, _frame);
         self.demo_settings_panel(ctx, _frame);
         self.demo_panel(ctx, _frame);
+        self.app_settings_panel(ctx, _frame);
+        self.scene_hierarchy_panel(ctx, _frame);
     }
 }
 
 impl Pathfinding {
     fn top_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.top_panel
+            .set_font_scale(self.app_settings_panel.get_font_scale());
         self.top_panel.update(ctx, _frame);
     }
     fn demo_settings_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.demo_settings_panel.open = self.top_panel.is_demo_settings_open();
+        self.demo_settings_panel
+            .set_font_scale(self.app_settings_panel.get_font_scale());
         self.demo_settings_panel.update(ctx, _frame);
     }
     fn demo_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.demo_panel
             .set_env_settings(self.demo_settings_panel.get_env_settings());
         self.demo_panel.update(ctx, _frame);
+    }
+    fn app_settings_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.app_settings_panel.open = self.top_panel.is_app_settings_open();
+        self.app_settings_panel.update(ctx, _frame);
+        if self.app_settings_panel.is_logger_open() {
+            egui::Window::new("Log").show(ctx, |ui| {
+                // draws the logger ui.
+                egui_logger::logger_ui(ui);
+            });
+        }
+    }
+    fn scene_hierarchy_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.scene_hierarchy_panel.open = self.top_panel.is_demo_settings_open();
+        self.scene_hierarchy_panel.update(ctx, _frame);
     }
 }
 

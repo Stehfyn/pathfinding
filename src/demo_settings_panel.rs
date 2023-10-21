@@ -1,5 +1,6 @@
 use crate::{
-    demo_panel::EnvironmentSettings, demo_panel::Generated, demo_panel::Obstacle, demo_panel::Stage,
+    demo_panel::EnvironmentSettings, demo_panel::Generated, demo_panel::Obstacle,
+    demo_panel::Stage, scene_hierarchy_panel::Tree,
 };
 
 use std::ops::RangeInclusive;
@@ -14,6 +15,8 @@ pub struct DemoSettingsPanel {
     #[serde(skip)]
     font_size: f32,
     #[serde(skip)]
+    font_scale: f32,
+    #[serde(skip)]
     sep_width: f32,
     #[serde(skip)]
     height: f32,
@@ -24,7 +27,7 @@ pub struct DemoSettingsPanel {
     #[serde(skip)]
     label: String,
     #[serde(skip)]
-    next_dimensions: egui::Vec2,
+    dimensions: egui::Vec2,
     #[serde(skip)]
     env_settings: EnvironmentSettings,
 }
@@ -34,12 +37,13 @@ impl Default for DemoSettingsPanel {
         Self {
             open: false,
             font_size: 20.0,
+            font_scale: 1.0,
             sep_width: 0.0,
             height: 200.0,
             widget_rects: Vec::default(),
             sub_header_rects: Vec::default(),
             label: "🖧 Configure".to_owned(),
-            next_dimensions: egui::vec2(400., 300.),
+            dimensions: egui::vec2(400., 300.),
             env_settings: EnvironmentSettings::default(),
         }
     }
@@ -49,8 +53,12 @@ impl Panel for DemoSettingsPanel {
     #[allow(unused_variables)]
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let mut open = self.open;
-        egui::Window::new("My Window")
-            .fixed_size(self.next_dimensions)
+        egui::Window::new("Demo Settings")
+            .fixed_pos((
+                40.,
+                (ctx.screen_rect().max.y / 2.) - (self.dimensions.y / 2.),
+            ))
+            .fixed_size(self.dimensions)
             .title_bar(false)
             .open(&mut open)
             .show(ctx, |ui| {
@@ -58,11 +66,15 @@ impl Panel for DemoSettingsPanel {
 
                 ui.scope(|ui| {
                     ui.vertical_centered(|ui| {
-                        ui.heading(self.label.clone());
+                        ui.heading(
+                            egui::RichText::new(self.label.clone())
+                                .size(self.font_size * self.font_scale),
+                        );
                     });
                 });
 
                 ui.separator();
+
                 ui.style_mut().spacing.item_spacing.y = 0.;
 
                 ui.horizontal(|ui| {
@@ -73,8 +85,14 @@ impl Panel for DemoSettingsPanel {
                                 / 2.0)
                                 + (ui.style().spacing.item_spacing.x / 2.0),
                         );
-                        ui.label(egui::RichText::new("Environment").size(20.));
-                        ui.label(egui::RichText::new("Pathfinding").size(20.));
+                        ui.label(
+                            egui::RichText::new("Environment")
+                                .size(self.font_size * self.font_scale),
+                        );
+                        ui.label(
+                            egui::RichText::new("Pathfinding")
+                                .size(self.font_size * self.font_scale),
+                        );
                     });
                 });
 
@@ -228,6 +246,9 @@ impl DemoSettingsPanel {
     pub fn get_env_settings(&self) -> EnvironmentSettings {
         self.env_settings
     }
+    pub fn set_font_scale(&mut self, scale: f32) {
+        self.font_scale = scale;
+    }
 }
 
 impl DemoSettingsPanel {
@@ -238,7 +259,10 @@ impl DemoSettingsPanel {
             ui.painter()
                 .layout(
                     "Environment".to_owned(),
-                    egui::FontId::new(self.font_size, egui::FontFamily::Proportional),
+                    egui::FontId::new(
+                        self.font_size * self.font_scale,
+                        egui::FontFamily::Proportional,
+                    ),
                     egui::Color32::default(),
                     MAX_WRAP,
                 )
@@ -249,7 +273,10 @@ impl DemoSettingsPanel {
             ui.painter()
                 .layout(
                     "Pathfinding".to_owned(),
-                    egui::FontId::new(self.font_size, egui::FontFamily::Proportional),
+                    egui::FontId::new(
+                        self.font_size * self.font_scale,
+                        egui::FontFamily::Proportional,
+                    ),
                     egui::Color32::default(),
                     MAX_WRAP,
                 )

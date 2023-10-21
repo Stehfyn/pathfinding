@@ -1,9 +1,17 @@
 use super::Panel;
 use super::MAX_WRAP;
+use crate::pathfinding::NavMesh;
+use crate::pathfinding::Pos2;
 use egui::RichText;
+use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
+use poll_promise::Promise;
 use rand::Rng;
+use std::collections::HashMap;
 use std::f64::consts::TAU;
 use std::ops::RangeInclusive;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
 pub enum Stage {
@@ -97,8 +105,8 @@ pub struct DemoPanel {
     marker_size: f32,
     grid: egui::Rect,
     env_settings: EnvironmentSettings,
-    cursor_x: i32,
-    cursor_y: i32,
+    cursor_x: f64,
+    cursor_y: f64,
 
     base_points: Vec<[f64; 2]>,
     waypoint_points: Vec<[f64; 2]>,
@@ -108,8 +116,16 @@ pub struct DemoPanel {
     hovered_points: Vec<[f64; 2]>,
     generate: bool,
     obstacles: Vec<ShapeParams>,
+    space_lut: HashMap<(i64, i64), bool>,
     stretch: bool,
     first_frame: bool,
+
+    navmesh: NavMesh,
+
+    start: Pos2,
+    end: Pos2,
+
+    path: Vec<Pos2>,
 }
 
 impl Default for DemoPanel {
@@ -123,8 +139,8 @@ impl Default for DemoPanel {
             ),
             env_settings: EnvironmentSettings::default(),
 
-            cursor_x: i32::MAX,
-            cursor_y: i32::MAX,
+            cursor_x: f64::MAX,
+            cursor_y: f64::MAX,
 
             base_points: Vec::new(),
             waypoint_points: Vec::new(),
@@ -134,8 +150,14 @@ impl Default for DemoPanel {
             hovered_points: Vec::new(),
             generate: false,
             obstacles: Vec::new(),
+            space_lut: HashMap::default(),
             first_frame: true,
             stretch: true,
+
+            navmesh: NavMesh::default(),
+            start: Pos2::default(),
+            end: Pos2::default(),
+            path: Vec::default(),
         }
     }
 }
@@ -162,6 +184,8 @@ impl Panel for DemoPanel {
                 ui.layer_id(),
                 ui.available_rect_before_wrap(),
             );
+            self.navmesh
+                .set_grid_boundaries(Pos2::from_min(&self.grid), Pos2::from_max(&self.grid));
             self.paint_grid(ui, &painter);
             // Make sure we allocate what we used (everything)
             ui.expand_to_include_rect(painter.clip_rect());
@@ -184,15 +208,18 @@ impl DemoPanel {
     fn paint_grid(&mut self, ui: &mut egui::Ui, painter: &egui::Painter) {
         let rect = painter.clip_rect();
 
-        let mut markers = self.calc_markers(ui);
+        let mut markers = self.update_markers(ui);
         let hovered_markers = markers.remove(0);
         let base_markers = markers.remove(0);
+        let path_markers = markers.remove(0);
+
         let plot = egui_plot::Plot::new("navmesh")
             .legend(egui_plot::Legend::default().position(egui_plot::Corner::RightBottom))
-            .show_x(false)
-            .show_y(false)
+            .show_x(true)
+            .show_y(true)
             .y_axis_width(2)
             .allow_zoom(false)
+            .allow_boxed_zoom(false)
             .auto_bounds_x()
             .auto_bounds_y()
             .include_x(100)
@@ -202,124 +229,215 @@ impl DemoPanel {
             .data_aspect(1.0);
 
         plot.show(ui, |plot_ui| {
-            let mut x: i32 = 0;
-            let mut y: i32 = 0;
+            let (x, y) = self.update_cursor_pos(plot_ui);
 
             if !self.first_frame && self.stretch {
                 self.stretch_grid_x_boundaries(plot_ui);
                 self.stretch = false;
             }
 
-            if self.first_frame {
-                self.first_frame = false;
+            self.draw_grid_boundaries(plot_ui);
+
+            if self.env_settings.stage == Stage::Generated {
+                plot_ui.points(base_markers);
             }
 
-            //draw grid
-            self.grid_boundaries(plot_ui);
-
-            if let Some(point) = plot_ui.pointer_coordinate() {
-                x = point.x as i32;
-                y = point.y as i32;
-
-                self.cursor_x = x;
-                self.cursor_y = y;
-            }
-
-            //plot_ui.points(base_markers);
             plot_ui.points(hovered_markers);
 
+            plot_ui.points(path_markers);
+
             if self.generate {
-                self.obstacles.clear();
-                match self.env_settings.n {
-                    Generated::N(n) => {
-                        for _ in 0..n {
-                            match self.env_settings.obstacle {
-                                Obstacle::Circular => {
-                                    let center_x = rand::thread_rng().gen_range(
-                                        (self.grid.min.x as i32)..(self.grid.max.x as i32),
-                                    ) as f64;
-                                    let center_y = rand::thread_rng().gen_range(0..100) as f64;
-                                    let radius_x = rand::thread_rng().gen_range(
-                                        self.env_settings.circle_radius_min
-                                            ..self.env_settings.circle_radius_max,
-                                    ) as f64;
-                                    let radius_y = radius_x;
-
-                                    let circle_params = CircleParams {
-                                        center_x: center_x as f64,
-                                        center_y: center_y as f64,
-                                        radius_x: radius_x as f64,
-                                        radius_y: radius_y as f64,
-                                    };
-
-                                    self.obstacles.push(ShapeParams::Circle(circle_params));
-                                }
-                                Obstacle::Rectangular => {
-                                    let center_x = rand::thread_rng().gen_range(
-                                        (self.grid.min.x as i32)..(self.grid.max.x as i32),
-                                    ) as f64;
-                                    let center_y = rand::thread_rng().gen_range(0..100) as f64;
-                                    let width = rand::thread_rng().gen_range(
-                                        self.env_settings.rect_side_min
-                                            ..self.env_settings.rect_side_max,
-                                    ) as f64;
-                                    let height = rand::thread_rng().gen_range(
-                                        self.env_settings.rect_side_min
-                                            ..self.env_settings.rect_side_max,
-                                    ) as f64;
-
-                                    let rect_params = RectParams {
-                                        center_x: center_x,
-                                        center_y: center_y,
-                                        width: width as f64,
-                                        height: height as f64,
-                                    };
-
-                                    self.obstacles.push(ShapeParams::Rectangle(rect_params));
-                                }
-                            }
-                        }
-                    }
-                }
+                self.generate_obstacles();
             }
 
-            if !(self.env_settings.stage == Stage::Office)
-                && !(self.env_settings.stage == Stage::AStar)
-            {
-                for obs in self.obstacles.iter() {
-                    match obs {
-                        ShapeParams::Circle(cp) => {
-                            let circle = self.create_circle(cp.center_x, cp.center_y, cp.radius_y);
-                            plot_ui.polygon(circle);
-                        }
-                        ShapeParams::Rectangle(rp) => {
-                            let rect = self.create_rectangle(
-                                rp.center_x,
-                                rp.center_y,
-                                rp.width,
-                                rp.height,
-                            );
-                            for line in rect {
-                                plot_ui.line(line);
-                            }
-                        }
-                    }
-                }
-            } else if self.env_settings.stage == Stage::AStar {
-                self.a_star_stage(plot_ui);
-            }
+            self.draw_stage(plot_ui);
 
-            let dist = plot_ui
-                .screen_from_plot(egui_plot::PlotPoint::new(0.0, 0.0))
-                .distance(plot_ui.screen_from_plot(egui_plot::PlotPoint::new(100.0, 0.0)));
-
-            // 1.8 for overlap
-            self.marker_size = dist / (100. * 2.2);
+            self.update_marker_size(plot_ui);
         });
+
+        if self.first_frame {
+            self.first_frame = false;
+        }
+    }
+}
+
+fn fill_lut_with_rectangle(
+    lut: &mut HashMap<(i64, i64), bool>,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) {
+    let min_ix = x.floor() as i64;
+    let max_ix = (x + width).floor() as i64;
+    let min_iy = y.floor() as i64;
+    let max_iy = (y + height).floor() as i64;
+
+    for ix in min_ix..=max_ix {
+        for iy in min_iy..=max_iy {
+            lut.insert((ix, iy), true);
+        }
+    }
+}
+
+fn fill_lut_with_circle(lut: &mut HashMap<(i64, i64), bool>, cx: f64, cy: f64, r: f64) {
+    let min_x = (cx - r).floor() as i64;
+    let max_x = (cx + r).ceil() as i64;
+    let min_y = (cy - r).floor() as i64;
+    let max_y = (cy + r).ceil() as i64;
+
+    for x in min_x..=max_x {
+        for y in min_y..=max_y {
+            if is_inside_circle(x, y, cx, cy, r) {
+                lut.insert((x, y), true);
+            }
+        }
+    }
+}
+
+fn is_inside_circle(x: i64, y: i64, cx: f64, cy: f64, r: f64) -> bool {
+    let corners = [
+        (x as f64, y as f64),
+        (x as f64 + 1.0, y as f64),
+        (x as f64, y as f64 + 1.0),
+        (x as f64 + 1.0, y as f64 + 1.0),
+    ];
+
+    corners.iter().any(|&(px, py)| {
+        let dx = px - cx;
+        let dy = py - cy;
+        dx * dx + dy * dy <= r * r
+    })
+}
+
+impl DemoPanel {
+    fn create_rectangle(&self, x: f64, y: f64, width: f64, height: f64) -> Vec<egui_plot::Line> {
+        let top_left = [x, y];
+        let top_right = [x + width, y];
+        let bottom_left = [x, y + height];
+        let bottom_right = [x + width, y + height];
+        // left line
+
+        vec![
+            egui_plot::Line::new(egui_plot::PlotPoints::new(vec![
+                top_left,
+                top_right,
+                bottom_right,
+                bottom_left,
+                top_left,
+            ]))
+            .fill(top_left[1] as f32), // top line
+        ]
+    }
+
+    fn create_circle(&self, cx: f64, cy: f64, r: f64) -> egui_plot::Polygon {
+        egui_plot::Polygon::new(egui_plot::PlotPoints::from_parametric_callback(
+            |t| (r * t.sin() + cx, r * t.cos() + cy),
+            0.0..TAU,
+            100,
+        ))
+    }
+
+    fn create_ellipse(&self, cx: f64, cy: f64, rx: f64, ry: f64) -> egui_plot::Polygon {
+        egui_plot::Polygon::new(egui_plot::PlotPoints::from_parametric_callback(
+            |t| (rx * t.sin() + cx, ry * t.cos() + cy),
+            0.0..TAU,
+            100,
+        ))
+    }
+
+    fn generate_obstacles(&mut self) {
+        self.obstacles.clear();
+        self.space_lut.clear();
+
+        match self.env_settings.n {
+            Generated::N(n) => {
+                for _ in 0..n {
+                    match self.env_settings.obstacle {
+                        Obstacle::Circular => {
+                            let center_x = rand::thread_rng()
+                                .gen_range((self.grid.min.x as i32)..(self.grid.max.x as i32))
+                                as f64;
+                            let center_y = rand::thread_rng().gen_range(0..100) as f64;
+                            let radius_x = rand::thread_rng().gen_range(
+                                self.env_settings.circle_radius_min
+                                    ..self.env_settings.circle_radius_max,
+                            ) as f64;
+                            let radius_y = radius_x;
+
+                            let circle_params = CircleParams {
+                                center_x: center_x as f64,
+                                center_y: center_y as f64,
+                                radius_x: radius_x as f64,
+                                radius_y: radius_y as f64,
+                            };
+                            fill_lut_with_circle(&mut self.space_lut, center_x, center_y, radius_x);
+                            self.obstacles.push(ShapeParams::Circle(circle_params));
+                        }
+                        Obstacle::Rectangular => {
+                            let center_x = rand::thread_rng()
+                                .gen_range((self.grid.min.x as i32)..(self.grid.max.x as i32))
+                                as f64;
+                            let center_y = rand::thread_rng().gen_range(0..100) as f64;
+                            let width = rand::thread_rng().gen_range(
+                                self.env_settings.rect_side_min..self.env_settings.rect_side_max,
+                            ) as f64;
+                            let height = rand::thread_rng().gen_range(
+                                self.env_settings.rect_side_min..self.env_settings.rect_side_max,
+                            ) as f64;
+
+                            let rect_params = RectParams {
+                                center_x: center_x,
+                                center_y: center_y,
+                                width: width as f64,
+                                height: height as f64,
+                            };
+                            fill_lut_with_rectangle(
+                                &mut self.space_lut,
+                                center_x,
+                                center_y,
+                                width,
+                                height,
+                            );
+                            self.obstacles.push(ShapeParams::Rectangle(rect_params));
+                        }
+                    }
+                }
+            }
+        }
+        self.navmesh.set_space_lut(self.space_lut.clone());
     }
 }
 
 impl DemoPanel {
+    fn draw_grid_boundaries(&self, plot_ui: &mut egui_plot::PlotUi) {
+        let top_left = [self.grid.left() as f64, self.grid.top() as f64];
+        let top_right = [self.grid.right() as f64, self.grid.top() as f64];
+        let bottom_left = [self.grid.left() as f64, self.grid.bottom() as f64];
+        let bottom_right = [self.grid.right() as f64, self.grid.bottom() as f64];
+
+        plot_ui.line(
+            egui_plot::Line::new(egui_plot::PlotPoints::new(vec![
+                top_left,
+                top_right,
+                bottom_right,
+                bottom_left,
+                top_left,
+            ]))
+            .width(2.)
+            .color(egui::Color32::from_rgba_unmultiplied(125, 125, 125, 125))
+            .style(egui_plot::LineStyle::Dashed { length: 10. }),
+        );
+    }
+
+    fn draw_stage(&mut self, plot_ui: &mut egui_plot::PlotUi) {
+        if self.env_settings.stage == Stage::Generated {
+            self.generated_stage(plot_ui);
+        } else if self.env_settings.stage == Stage::AStar {
+            self.a_star_stage(plot_ui);
+        }
+    }
+
     fn a_star_stage(&mut self, plot_ui: &mut egui_plot::PlotUi) {
         // red
         let p1r = [30f64, 41f64];
@@ -361,7 +479,27 @@ impl DemoPanel {
             .fill(50.),
         );
     }
-    fn calc_markers(&mut self, ui: &egui::Ui) -> Vec<egui_plot::Points> {
+
+    fn generated_stage(&mut self, plot_ui: &mut egui_plot::PlotUi) {
+        for obs in self.obstacles.iter() {
+            match obs {
+                ShapeParams::Circle(cp) => {
+                    let circle = self.create_circle(cp.center_x, cp.center_y, cp.radius_y);
+                    plot_ui.polygon(circle);
+                }
+                ShapeParams::Rectangle(rp) => {
+                    let rect = self.create_rectangle(rp.center_x, rp.center_y, rp.width, rp.height);
+                    for line in rect {
+                        plot_ui.line(line);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl DemoPanel {
+    fn update_markers(&mut self, ui: &egui::Ui) -> Vec<egui_plot::Points> {
         self.base_points.clear();
         self.waypoint_points.clear();
         self.path_points.clear();
@@ -374,21 +512,39 @@ impl DemoPanel {
         let endx = startx + self.grid.width() as i32;
         let endy = starty + self.grid.height() as i32;
 
-        for i in startx..endx {
-            for j in starty..endy {
-                let point = [(i as f64 + 0.5f64), (j as f64 + 0.5f64)];
-                if (j == self.cursor_y) && (i == self.cursor_x) {
-                    self.hovered_points.push(point);
-                } else {
-                    self.base_points.push(point);
-                }
+        for ((x, y), covered) in &self.space_lut {
+            if *covered {
+                self.base_points
+                    .push([(*x as f64).floor() + 0.5f64, (*y as f64).floor() + 0.5f64]);
             }
+        }
+
+        for pos in &self.path {
+            self.path_points.push([
+                (pos.x as f64).floor() + 0.5f64,
+                (pos.y as f64).floor() + 0.5f64,
+            ]);
+        }
+
+        let x_range = startx..endx;
+        let y_range = starty..endy;
+        if x_range.contains(&(self.cursor_x.floor() as i32))
+            && y_range.contains(&(self.cursor_y.floor() as i32))
+        {
+            self.hovered_points
+                .push([self.cursor_x as f64, self.cursor_y as f64]);
         }
 
         let base_color = if ui.visuals().dark_mode {
             egui::Color32::from_rgba_unmultiplied(255, 255, 255, 25)
         } else {
             egui::Color32::from_rgba_unmultiplied(25, 25, 25, 25)
+        };
+
+        let path_color = if ui.visuals().dark_mode {
+            egui::Color32::from_rgba_unmultiplied(25, 255, 25, 25)
+        } else {
+            egui::Color32::from_rgba_unmultiplied(25, 255, 25, 25)
         };
 
         let hovered_markers = egui_plot::Points::new(self.hovered_points.clone())
@@ -405,42 +561,14 @@ impl DemoPanel {
             .color(base_color)
             .shape(egui_plot::MarkerShape::Square);
 
-        vec![hovered_markers, base_markers]
-    }
+        let path_markers = egui_plot::Points::new(self.path_points.clone())
+            .filled(true)
+            .radius(self.marker_size)
+            .highlight(true)
+            .color(path_color)
+            .shape(egui_plot::MarkerShape::Square);
 
-    fn create_rectangle(&self, x: f64, y: f64, width: f64, height: f64) -> Vec<egui_plot::Line> {
-        let top_left = [x, y];
-        let top_right = [x + width, y];
-        let bottom_left = [x, y + height];
-        let bottom_right = [x + width, y + height];
-        // left line
-
-        vec![
-            egui_plot::Line::new(egui_plot::PlotPoints::new(vec![
-                top_left,
-                top_right,
-                bottom_right,
-                bottom_left,
-                top_left,
-            ]))
-            .fill(top_left[1] as f32), // top line
-        ]
-    }
-
-    fn create_circle(&self, cx: f64, cy: f64, r: f64) -> egui_plot::Polygon {
-        egui_plot::Polygon::new(egui_plot::PlotPoints::from_parametric_callback(
-            |t| (r * t.sin() + cx, r * t.cos() + cy),
-            0.0..TAU,
-            100,
-        ))
-    }
-
-    fn create_ellipse(&self, cx: f64, cy: f64, rx: f64, ry: f64) -> egui_plot::Polygon {
-        egui_plot::Polygon::new(egui_plot::PlotPoints::from_parametric_callback(
-            |t| (rx * t.sin() + cx, ry * t.cos() + cy),
-            0.0..TAU,
-            100,
-        ))
+        vec![hovered_markers, base_markers, path_markers]
     }
 
     fn stretch_grid_x_boundaries(&mut self, plot_ui: &mut egui_plot::PlotUi) {
@@ -448,25 +576,64 @@ impl DemoPanel {
         self.grid.max.x = plot_ui.plot_bounds().max()[0] as f32;
     }
 
-    fn grid_boundaries(&self, plot_ui: &mut egui_plot::PlotUi) {
-        let top_left = [self.grid.left() as f64, self.grid.top() as f64];
-        let top_right = [self.grid.right() as f64, self.grid.top() as f64];
-        let bottom_left = [self.grid.left() as f64, self.grid.bottom() as f64];
-        let bottom_right = [self.grid.right() as f64, self.grid.bottom() as f64];
+    fn update_cursor_pos(&mut self, plot_ui: &egui_plot::PlotUi) -> (f64, f64) {
+        static mut PATH_PROMISE: Option<Promise<Option<Vec<Pos2>>>> = None;
 
-        plot_ui.line(
-            egui_plot::Line::new(egui_plot::PlotPoints::new(vec![
-                top_left,
-                top_right,
-                bottom_right,
-                bottom_left,
-                top_left,
-            ]))
-            .width(2.)
-            .color(egui::Color32::from_rgba_unmultiplied(125, 125, 125, 125))
-            .style(egui_plot::LineStyle::Dashed { length: 10. }),
-        );
+        let mut x = 0f64;
+        let mut y = 0f64;
+        if let Some(point) = plot_ui.pointer_coordinate() {
+            x = (point.x.floor() + 0.5) as f64;
+            y = (point.y.floor() + 0.5) as f64;
+
+            self.cursor_x = x;
+            self.cursor_y = y;
+
+            plot_ui.ctx().input(|ui| {
+                if ui.pointer.primary_released() {
+                    self.start.x = x as i64;
+                    self.start.y = y as i64;
+
+                    unsafe {
+                        if PATH_PROMISE.is_none() {
+                            PATH_PROMISE = self.navmesh.async_a_star(self.start, self.end);
+                        }
+                    }
+                }
+
+                if ui.pointer.secondary_released() {
+                    self.end.x = x as i64;
+                    self.end.y = y as i64;
+
+                    unsafe {
+                        if PATH_PROMISE.is_none() {
+                            PATH_PROMISE = self.navmesh.async_a_star(self.start, self.end);
+                        }
+                    }
+                }
+            });
+
+            unsafe {
+                if let Some(promise) = &mut PATH_PROMISE {
+                    if let Some(path_result) = promise.ready_mut() {
+                        if let Some(path) = path_result.take() {
+                            self.path = path;
+                        } else {
+                            // Handle pathfinding failure here if necessary
+                        }
+                        PATH_PROMISE = None;
+                    }
+                }
+            }
+        }
+        (x, y)
     }
 
-    fn generate_obstacles(&mut self) {}
+    fn update_marker_size(&mut self, plot_ui: &egui_plot::PlotUi) {
+        let dist = plot_ui
+            .screen_from_plot(egui_plot::PlotPoint::new(0.0, 0.0))
+            .distance(plot_ui.screen_from_plot(egui_plot::PlotPoint::new(100.0, 0.0)));
+
+        // 1.8 for overlap
+        self.marker_size = dist / (100. * 2.2);
+    }
 }
