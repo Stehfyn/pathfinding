@@ -1,9 +1,8 @@
-use eframe::App;
-
 use crate::{
-    app_settings_panel::AppSettingsPanel, demo_panel::DemoPanel,
-    demo_settings_panel::DemoSettingsPanel, entity_property_panel::EntityPropertyPanel,
-    scene_hierarchy_panel::SceneHierarchyPanel, top_panel::TopPanel, Panel,
+    panel::app_settings_panel::AppSettingsPanel, panel::demo_panel::DemoPanel,
+    panel::demo_settings_panel::DemoSettingsPanel,
+    panel::entity_property_panel::EntityPropertyPanel,
+    panel::scene_hierarchy_panel::SceneHierarchyPanel, panel::top_panel::TopPanel, panel::Panel,
 };
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.

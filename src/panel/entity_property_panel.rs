@@ -1,6 +1,8 @@
-use crate::scene_hierarchy_panel;
-
 use super::Panel;
+
+pub trait Component {
+    fn update(&mut self);
+}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -12,6 +14,8 @@ pub struct EntityPropertyPanel {
     font_scale: f32,
     #[serde(skip)]
     dimensions: egui::Vec2,
+    #[serde(skip)]
+    c: crate::ecs::component2::Component2,
 }
 
 impl Default for EntityPropertyPanel {
@@ -21,6 +25,10 @@ impl Default for EntityPropertyPanel {
             font_size: 20.,
             font_scale: 1.,
             dimensions: egui::vec2(200., 400.),
+            c: crate::ecs::component2::Component2 {
+                x: 32.,
+                name: "example".to_string(),
+            },
         }
     }
 }
@@ -46,8 +54,11 @@ impl Panel for EntityPropertyPanel {
 
 impl EntityPropertyPanel {
     pub fn entity_property_ui(&mut self, ui: &mut egui::Ui) {
+        let mut drawer = self.c.get_ui_drawer();
+        // Somewhere in your rendering loop where egui Ui is available:
+        drawer(ui);
         unsafe {
-            let selected = scene_hierarchy_panel::get_selected();
+            let selected = super::scene_hierarchy_panel::get_selected();
             for entt in selected.iter() {
                 if *entt != 0 {
                     ui.label(format!("Entity {}", *entt));

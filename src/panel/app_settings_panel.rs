@@ -1,9 +1,5 @@
-use eframe::App;
-
-use crate::fixed_demo_label;
-
+use super::fixed_demo_label;
 use super::Panel;
-use super::MAX_WRAP;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]

@@ -1,9 +1,7 @@
 use crate::{
-    demo_panel::EnvironmentSettings, demo_panel::Generated, demo_panel::Obstacle,
-    demo_panel::Stage, scene_hierarchy_panel::Tree,
+    panel::demo_panel::EnvironmentSettings, panel::demo_panel::Generated,
+    panel::demo_panel::Obstacle, panel::demo_panel::Stage,
 };
-
-use std::ops::RangeInclusive;
 
 use super::Panel;
 use super::MAX_WRAP;

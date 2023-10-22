@@ -1,7 +1,7 @@
-use crate::fixed_demo_label;
-
 use super::Panel;
 use super::MAX_WRAP;
+use super::fixed_demo_label;
+
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TopPanel {

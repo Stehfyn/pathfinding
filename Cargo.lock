@@ -815,6 +815,7 @@ dependencies = [
  "lazy_static",
  "log",
  "once_cell",
+ "panel_macros",
  "poll-promise",
  "rand",
  "serde",
@@ -1814,6 +1815,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "706de7e2214113d63a8238d1910463cfce781129a6f263d13fdb09ff64355ba4"
 dependencies = [
  "ttf-parser",
+]
+
+[[package]]
+name = "panel_macros"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui_extras",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]

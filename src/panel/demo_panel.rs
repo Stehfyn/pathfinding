@@ -1,17 +1,10 @@
 use super::Panel;
-use super::MAX_WRAP;
+use crate::ecs::pos2::Pos2;
 use crate::pathfinding::NavMesh;
-use crate::pathfinding::Pos2;
-use egui::RichText;
-use lazy_static::lazy_static;
-use once_cell::sync::Lazy;
 use poll_promise::Promise;
 use rand::Rng;
 use std::collections::HashMap;
 use std::f64::consts::TAU;
-use std::ops::RangeInclusive;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
 
 #[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
 pub enum Stage {
