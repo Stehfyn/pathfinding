@@ -1,7 +1,7 @@
-use std::default;
+
 
 //use crate::ecs::component2::Component3;
-use crate::ecs::{component::*, entity::ENTITY_MANAGER};
+use crate::ecs::{component::*};
 
 use super::Panel;
 
@@ -68,7 +68,7 @@ impl EntityPropertyPanel {
                 }
                 ui.style_mut().text_styles = style.text_styles;
                 //egui::Resize::default().
-                let mut layout = egui::Layout::left_to_right(egui::Align::Center)
+                let _layout = egui::Layout::left_to_right(egui::Align::Center)
                     .with_cross_align(egui::Align::Center)
                     .with_cross_justify(false)
                     .with_main_wrap(true)

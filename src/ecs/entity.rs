@@ -1,4 +1,4 @@
-use super::component::{self, Component, ComponentTrait, Transform2};
+use super::component::{Component, ComponentTrait};
 use super::pos2;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -93,7 +93,7 @@ pub unsafe fn get_entity_from_id(id: usize) -> &'static mut Entity {
 
 pub unsafe fn get_entities_from_xy(x: f64, y: f64) -> Vec<&'static Entity> {
     let mut entities: Vec<&Entity> = Vec::new();
-    for (key, val) in ENTITY_MANAGER.iter_mut() {
+    for (_key, val) in ENTITY_MANAGER.iter_mut() {
         for c in val.components.iter() {
             match c {
                 Component::Mesh(mc) => {

@@ -14,7 +14,7 @@ pub enum SelectionEvent {
 
 pub fn make_hierarchy_selectable(
     ui: &mut egui::Ui,
-    id: egui::Id,
+    _id: egui::Id,
     ui_closure: impl FnOnce(&mut egui::Ui) -> egui::Response,
 ) -> Option<SelectionEvent> {
     let response = ui_closure(ui);
@@ -89,7 +89,7 @@ impl Tree {
         &mut self,
         ui: &mut egui::Ui,
         depth: usize,
-        name: &str,
+        _name: &str,
         font_size: f32,
         font_scale: f32,
     ) -> Action {
@@ -335,13 +335,13 @@ unsafe fn unselect(id: usize) {
 }
 
 unsafe fn select_all() {
-    for (key, val) in ENTITY_HIERARCHY_SELECTED.iter_mut() {
+    for (_key, val) in ENTITY_HIERARCHY_SELECTED.iter_mut() {
         *val = true;
     }
 }
 
 pub unsafe fn unselect_all() {
-    for (key, val) in ENTITY_HIERARCHY_SELECTED.iter_mut() {
+    for (_key, val) in ENTITY_HIERARCHY_SELECTED.iter_mut() {
         *val = false;
     }
 }

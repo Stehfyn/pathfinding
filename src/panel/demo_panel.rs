@@ -13,13 +13,13 @@ use std::f64::consts::TAU;
 
 struct PathPromise(Option<Promise<Option<Vec<Pos2>>>>);
 impl std::fmt::Debug for PathPromise {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Your custom logic here
         write!(f, "DebuggablePromise(...)")
     }
 }
 impl PartialEq for PathPromise {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(&self, _other: &Self) -> bool {
         false
     }
 }
@@ -227,16 +227,16 @@ impl DemoPanel {
 
 impl DemoPanel {
     fn paint_grid(&mut self, ui: &mut egui::Ui, painter: &egui::Painter) {
-        let rect = painter.clip_rect();
+        let _rect = painter.clip_rect();
 
         let mut markers = self.update_markers(ui);
         let hovered_markers = markers.remove(0);
         let base_markers = markers.remove(0);
         let path_markers = markers.remove(0);
 
-        let mut cursor = egui::CursorIcon::Default;
+        let _cursor = egui::CursorIcon::Default;
 
-        let r = ui.scope(|ui| {
+        let _r = ui.scope(|ui| {
             let plot = egui_plot::Plot::new("navmesh")
                 .legend(egui_plot::Legend::default().position(egui_plot::Corner::RightBottom))
                 .show_x(false)
@@ -254,7 +254,7 @@ impl DemoPanel {
 
             plot.show(ui, |plot_ui| {
                 let (x, y) = self.update_cursor_pos(plot_ui);
-                let xy = egui::Pos2::new(x as f32, y as f32);
+                let _xy = egui::Pos2::new(x as f32, y as f32);
 
                 if !self.first_frame && self.stretch {
                     self.stretch_grid_x_boundaries(plot_ui);
@@ -556,7 +556,7 @@ impl DemoPanel {
                             Component::Color(cc) => {
                                 col = cc.get().col;
                             }
-                            Component::Mesh(mc) => {}
+                            Component::Mesh(_mc) => {}
                         }
                     }
                     let markers = egui_plot::Points::new(points_to_draw)
@@ -728,7 +728,7 @@ impl DemoPanel {
 }
 
 impl DemoPanel {
-    fn navigate(&mut self, x: f64, y: f64, ui: &egui::InputState) {
+    fn navigate(&mut self, x: f64, y: f64, _ui: &egui::InputState) {
         self.start.x = x as i64;
         self.start.y = y as i64;
 
