@@ -1,11 +1,33 @@
+use super::scene_hierarchy_panel::get_selected;
 use super::Panel;
-use crate::ecs::pos2::Pos2;
+use crate::ecs::entity::get_entity_from_id;
+use crate::ecs::{component::*, entity::ENTITY_MANAGER};
+
+use crate::ecs::pos2::{self, Pos2};
 use crate::pathfinding::NavMesh;
 use poll_promise::Promise;
 use rand::Rng;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::f64::consts::TAU;
 
+struct PathPromise(Option<Promise<Option<Vec<Pos2>>>>);
+impl std::fmt::Debug for PathPromise {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        // Your custom logic here
+        write!(f, "DebuggablePromise(...)")
+    }
+}
+impl PartialEq for PathPromise {
+    fn eq(&self, other: &Self) -> bool {
+        false
+    }
+}
+impl Clone for PathPromise {
+    fn clone(&self) -> Self {
+        Self(Option::None)
+    }
+}
 #[derive(Debug, PartialEq, Clone, Copy, serde::Deserialize, serde::Serialize)]
 pub enum Stage {
     AStar,
@@ -92,7 +114,8 @@ pub enum ShapeParams {
     Rectangle(RectParams),
 }
 
-#[derive(Debug, PartialEq, Clone, serde::Deserialize, serde::Serialize)]
+//#[derive(Debug, PartialEq, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct DemoPanel {
     pub open: bool,
     marker_size: f32,
@@ -119,6 +142,9 @@ pub struct DemoPanel {
     end: Pos2,
 
     path: Vec<Pos2>,
+
+    path_map: HashMap<usize, PathPromise>,
+    current_paths: HashMap<usize, Vec<Pos2>>,
 }
 
 impl Default for DemoPanel {
@@ -151,6 +177,8 @@ impl Default for DemoPanel {
             start: Pos2::default(),
             end: Pos2::default(),
             path: Vec::default(),
+            path_map: HashMap::default(),
+            current_paths: HashMap::default(),
         }
     }
 }
@@ -206,46 +234,60 @@ impl DemoPanel {
         let base_markers = markers.remove(0);
         let path_markers = markers.remove(0);
 
-        let plot = egui_plot::Plot::new("navmesh")
-            .legend(egui_plot::Legend::default().position(egui_plot::Corner::RightBottom))
-            .show_x(true)
-            .show_y(true)
-            .y_axis_width(2)
-            .allow_zoom(false)
-            .allow_boxed_zoom(false)
-            .auto_bounds_x()
-            .auto_bounds_y()
-            .include_x(100)
-            .include_y(100)
-            .include_x(0)
-            .include_y(0)
-            .data_aspect(1.0);
+        let mut cursor = egui::CursorIcon::Default;
 
-        plot.show(ui, |plot_ui| {
-            let (x, y) = self.update_cursor_pos(plot_ui);
+        let r = ui.scope(|ui| {
+            let plot = egui_plot::Plot::new("navmesh")
+                .legend(egui_plot::Legend::default().position(egui_plot::Corner::RightBottom))
+                .show_x(false)
+                .show_y(false)
+                .y_axis_width(2)
+                .allow_zoom(false)
+                .allow_boxed_zoom(true)
+                .auto_bounds_x()
+                .auto_bounds_y()
+                .include_x(100)
+                .include_y(100)
+                .include_x(0)
+                .include_y(0)
+                .data_aspect(1.0);
 
-            if !self.first_frame && self.stretch {
-                self.stretch_grid_x_boundaries(plot_ui);
-                self.stretch = false;
-            }
+            plot.show(ui, |plot_ui| {
+                let (x, y) = self.update_cursor_pos(plot_ui);
+                let xy = egui::Pos2::new(x as f32, y as f32);
 
-            self.draw_grid_boundaries(plot_ui);
+                if !self.first_frame && self.stretch {
+                    self.stretch_grid_x_boundaries(plot_ui);
+                    self.stretch = false;
+                }
 
-            if self.env_settings.stage == Stage::Generated {
-                plot_ui.points(base_markers);
-            }
+                self.draw_grid_boundaries(plot_ui);
 
-            plot_ui.points(hovered_markers);
+                let show_obst_bounds = false;
+                if show_obst_bounds {
+                    if self.env_settings.stage == Stage::Generated {
+                        plot_ui.points(base_markers);
+                    }
+                }
 
-            plot_ui.points(path_markers);
+                plot_ui.points(path_markers);
 
-            if self.generate {
-                self.generate_obstacles();
-            }
+                if self.generate {
+                    self.generate_obstacles();
+                }
 
-            self.draw_stage(plot_ui);
+                self.draw_stage(plot_ui);
 
-            self.update_marker_size(plot_ui);
+                self.draw_entities(plot_ui);
+
+                plot_ui.points(hovered_markers);
+
+                self.update_marker_size(plot_ui);
+
+                unsafe {
+                    crate::ecs::entity::propagate_entity_changes();
+                }
+            });
         });
 
         if self.first_frame {
@@ -474,16 +516,63 @@ impl DemoPanel {
     }
 
     fn generated_stage(&mut self, plot_ui: &mut egui_plot::PlotUi) {
+        let force_col = egui::Color32::from_rgba_unmultiplied(255, 0, 165, 10);
         for obs in self.obstacles.iter() {
             match obs {
                 ShapeParams::Circle(cp) => {
-                    let circle = self.create_circle(cp.center_x, cp.center_y, cp.radius_y);
+                    let circle = self
+                        .create_circle(cp.center_x, cp.center_y, cp.radius_y)
+                        .fill_color(force_col);
                     plot_ui.polygon(circle);
                 }
                 ShapeParams::Rectangle(rp) => {
                     let rect = self.create_rectangle(rp.center_x, rp.center_y, rp.width, rp.height);
                     for line in rect {
-                        plot_ui.line(line);
+                        plot_ui.line(line.color(force_col));
+                    }
+                }
+            }
+        }
+    }
+
+    fn draw_entities(&mut self, plot_ui: &mut egui_plot::PlotUi) {
+        unsafe {
+            let entities = ENTITY_MANAGER.iter();
+            let selected = get_selected();
+            for (id, e) in entities {
+                if *id != 0_usize {
+                    let mut pos = pos2::Pos2::default();
+                    let mut points_to_draw: Vec<[f64; 2]> = Vec::new();
+                    let mut col = egui::Color32::default();
+                    for c in &e.components {
+                        match c {
+                            Component::Transform2(tc) => {
+                                pos = tc.get().pos;
+                                points_to_draw.push([
+                                    tc.get().pos.x as f64 + 0.5f64,
+                                    tc.get().pos.y as f64 + 0.5f64,
+                                ]);
+                            }
+                            Component::Color(cc) => {
+                                col = cc.get().col;
+                            }
+                            Component::Mesh(mc) => {}
+                        }
+                    }
+                    let markers = egui_plot::Points::new(points_to_draw)
+                        .filled(true)
+                        .radius(self.marker_size * 1.2)
+                        .highlight(true)
+                        .color(col) // Red color
+                        .shape(egui_plot::MarkerShape::Square);
+
+                    plot_ui.points(markers);
+
+                    if selected.contains(id) {
+                        plot_ui.polygon(
+                            self.create_circle(pos.x as f64 + 0.5f64, pos.y as f64 + 0.5f64, 3f64)
+                                .name(e.data.name.clone()),
+                        );
                     }
                 }
             }
@@ -512,11 +601,15 @@ impl DemoPanel {
             }
         }
 
-        for pos in &self.path {
-            self.path_points.push([
-                (pos.x as f64).floor() + 0.5f64,
-                (pos.y as f64).floor() + 0.5f64,
-            ]);
+        let mut unique_positions = HashSet::new();
+
+        for path in self.current_paths.values() {
+            for pos in path {
+                if unique_positions.insert(*pos) {
+                    self.path_points
+                        .push([pos.x as f64 + 0.5, pos.y as f64 + 0.5]);
+                }
+            }
         }
 
         let x_range = startx..endx;
@@ -542,7 +635,7 @@ impl DemoPanel {
 
         let hovered_markers = egui_plot::Points::new(self.hovered_points.clone())
             .filled(true)
-            .radius(self.marker_size)
+            .radius(self.marker_size * 0.8)
             .highlight(true)
             .color(egui::Color32::from_rgba_unmultiplied(255, 0, 0, 255)) // Red color
             .shape(egui_plot::MarkerShape::Square);
@@ -572,8 +665,8 @@ impl DemoPanel {
     fn update_cursor_pos(&mut self, plot_ui: &egui_plot::PlotUi) -> (f64, f64) {
         static mut PATH_PROMISE: Option<Promise<Option<Vec<Pos2>>>> = None;
 
-        let mut x = 0f64;
-        let mut y = 0f64;
+        let mut x = f64::MIN;
+        let mut y = f64::MIN;
         if let Some(point) = plot_ui.pointer_coordinate() {
             x = (point.x.floor() + 0.5) as f64;
             y = (point.y.floor() + 0.5) as f64;
@@ -581,42 +674,45 @@ impl DemoPanel {
             self.cursor_x = x;
             self.cursor_y = y;
 
-            plot_ui.ctx().input(|ui| {
-                if ui.pointer.primary_released() {
-                    self.start.x = x as i64;
-                    self.start.y = y as i64;
-
-                    unsafe {
-                        if PATH_PROMISE.is_none() {
-                            PATH_PROMISE = self.navmesh.async_a_star(self.start, self.end);
+            plot_ui.ctx().input(|ui| unsafe {
+                if ui.pointer.primary_clicked() {
+                    let entts = crate::ecs::entity::get_entities_from_xy(x, y);
+                    if entts.len() > 0 {
+                        if !ui.raw.modifiers.ctrl {
+                            crate::panel::scene_hierarchy_panel::unselect_all();
                         }
-                    }
-                }
 
-                if ui.pointer.secondary_released() {
-                    self.end.x = x as i64;
-                    self.end.y = y as i64;
-
-                    unsafe {
-                        if PATH_PROMISE.is_none() {
-                            PATH_PROMISE = self.navmesh.async_a_star(self.start, self.end);
+                        for e in entts.iter() {
+                            crate::panel::scene_hierarchy_panel::select((*e).get_id());
                         }
+                    } else {
+                        self.navigate(x, y, ui);
                     }
                 }
             });
 
             unsafe {
-                if let Some(promise) = &mut PATH_PROMISE {
-                    if let Some(path_result) = promise.ready_mut() {
-                        if let Some(path) = path_result.take() {
-                            self.path = path;
-                        } else {
-                            // Handle pathfinding failure here if necessary
+                let selected = get_selected();
+                for s in selected.iter() {
+                    if let Some(path_promise) = self.path_map.get_mut(s) {
+                        if let Some(promise) = &mut path_promise.0 {
+                            if let Some(path_result) = promise.ready_mut() {
+                                if let Some(path) = path_result.take() {
+                                    self.current_paths.insert(*s, path);
+                                    self.path_map.remove(s);
+                                } else {
+                                    self.current_paths.remove(s);
+                                    self.path_map.remove(s);
+                                }
+                                PATH_PROMISE = None;
+                            }
                         }
-                        PATH_PROMISE = None;
+                    } else {
+                        // Handle the case where the key is not found in path_map if needed.
                     }
                 }
             }
+        } else {
         }
         (x, y)
     }
@@ -628,5 +724,65 @@ impl DemoPanel {
 
         // 1.8 for overlap
         self.marker_size = dist / (100. * 2.2);
+    }
+}
+
+impl DemoPanel {
+    fn navigate(&mut self, x: f64, y: f64, ui: &egui::InputState) {
+        self.start.x = x as i64;
+        self.start.y = y as i64;
+
+        unsafe {
+            let selected = get_selected();
+            for s in selected.iter() {
+                if let Some(path_promise) = self.path_map.get_mut(s) {
+                    // handle the Option
+                    if path_promise.0.is_none() {
+                        // check the inner Option of PathPromise
+                        let e = get_entity_from_id(*s);
+                        let mut pos = pos2::Pos2::default();
+                        for c in e.components.iter() {
+                            match c {
+                                Component::Transform2(tc) => {
+                                    pos = tc.get().pos;
+                                }
+                                _ => {}
+                            }
+                        }
+                        path_promise.0 = self.navmesh.async_a_star(pos, self.start);
+                        log::info!(
+                            "{} ({}, {}) wants to go to ({}, {})",
+                            s,
+                            pos.x,
+                            pos.y,
+                            self.start.x,
+                            self.start.y
+                        );
+                    }
+                } else {
+                    let e = get_entity_from_id(*s);
+                    let mut pos = pos2::Pos2::default();
+                    for c in e.components.iter() {
+                        match c {
+                            Component::Transform2(tc) => {
+                                pos = tc.get().pos;
+                            }
+                            _ => {}
+                        }
+                    }
+                    let some_path_promise = self.navmesh.async_a_star(pos, self.start);
+                    log::info!(
+                        "{} ({}, {}) wants to go to ({}, {})",
+                        s,
+                        pos.x,
+                        pos.y,
+                        self.start.x,
+                        self.start.y
+                    );
+                    self.path_map
+                        .insert(e.get_id(), PathPromise(some_path_promise));
+                }
+            }
+        }
     }
 }

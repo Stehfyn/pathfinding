@@ -13,6 +13,10 @@ impl Default for Pos2 {
 }
 
 impl Pos2 {
+    pub fn new(x: i64, y: i64) -> Self {
+        Self { x: x, y: y }
+    }
+
     pub fn from_min(rect: &egui::Rect) -> Self {
         Self {
             x: rect.min.x as i64,

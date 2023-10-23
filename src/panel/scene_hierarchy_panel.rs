@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
-use std::sync::atomic::AtomicUsize;
-static ENTITY_COUNTER: AtomicUsize = AtomicUsize::new(0);
+use crate::ecs::entity::{get_entity_from_id, Entity, ENTITY_MANAGER};
 use once_cell::sync::Lazy;
-
 static mut ENTITY_HIERARCHY_OPEN: Lazy<HashMap<usize, bool>> = Lazy::new(|| HashMap::new());
 static mut ENTITY_HIERARCHY_SELECTED: Lazy<HashMap<usize, bool>> = Lazy::new(|| HashMap::new());
 
@@ -61,10 +59,12 @@ pub struct Tree {
 
 impl Default for Tree {
     fn default() -> Self {
-        let id = ENTITY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let e = Entity::default();
+        let id = e.get_id();
         unsafe {
             ENTITY_HIERARCHY_OPEN.insert(id, true);
             ENTITY_HIERARCHY_SELECTED.insert(id, false);
+            ENTITY_MANAGER.insert(id, e);
         }
         let name = if id == 0_usize {
             "Scene".to_string()
@@ -105,7 +105,13 @@ impl Tree {
                 y: cursor_pos.y + 18f32,
             },
         };
-        let name_str = self.name.clone();
+
+        let mut name_str = self.name.clone();
+        if self.id != 0_usize {
+            unsafe {
+                name_str = get_entity_from_id(self.id).data.name.clone();
+            }
+        }
         let eid = self.id;
 
         let act = egui::CollapsingHeader::new(egui::RichText::new("").size(font_size * font_scale))
@@ -308,7 +314,7 @@ unsafe fn toggle_collapse(id: usize) {
     }
 }
 
-unsafe fn toggle_select(id: usize) {
+pub unsafe fn toggle_select(id: usize) {
     if let Some(state) = ENTITY_HIERARCHY_SELECTED.get_mut(&id) {
         *state = !*state;
     }
@@ -320,7 +326,7 @@ unsafe fn set_select(id: usize, state: bool) {
     }
 }
 
-unsafe fn select(id: usize) {
+pub unsafe fn select(id: usize) {
     set_select(id, true);
 }
 
@@ -334,7 +340,7 @@ unsafe fn select_all() {
     }
 }
 
-unsafe fn unselect_all() {
+pub unsafe fn unselect_all() {
     for (key, val) in ENTITY_HIERARCHY_SELECTED.iter_mut() {
         *val = false;
     }
@@ -349,6 +355,12 @@ pub unsafe fn get_selected() -> Vec<usize> {
     }
     selected
 }
+
+pub unsafe fn is_selected(id: usize) -> bool {
+    let selected = get_selected();
+    selected.contains(&id)
+}
+
 unsafe fn query_select(id: usize) -> bool {
     *ENTITY_HIERARCHY_SELECTED.get(&id).unwrap()
 }
