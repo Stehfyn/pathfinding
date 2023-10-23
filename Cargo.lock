@@ -804,26 +804,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eframe_template"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui",
- "egui_extras",
- "egui_logger",
- "egui_plot",
- "getrandom",
- "lazy_static",
- "log",
- "once_cell",
- "panel_macros",
- "poll-promise",
- "rand",
- "serde",
- "wasm-bindgen-futures",
-]
-
-[[package]]
 name = "egui"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1862,6 +1842,26 @@ name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
+name = "pathfinding"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "egui_extras",
+ "egui_logger",
+ "egui_plot",
+ "getrandom",
+ "lazy_static",
+ "log",
+ "once_cell",
+ "panel_macros",
+ "poll-promise",
+ "rand",
+ "serde",
+ "wasm-bindgen-futures",
+]
 
 [[package]]
 name = "percent-encoding"
