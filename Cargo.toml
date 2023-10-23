@@ -17,7 +17,7 @@ rand = "0.8"
 egui = "0.23.0"
 egui_extras = "0.23.0"
 egui_plot = "0.23.0"
-panel_macros = { path = "./src/panel_macros" }
+panel_macros = { version = "0.1.0", path = "./src/panel_macros" }
 
 eframe = { version = "0.23.0", default-features = false, features = [
     "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
