@@ -102,6 +102,11 @@ impl Pathfinding {
     fn demo_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.demo_panel
             .set_env_settings(self.demo_settings_panel.get_env_settings());
+        if self.demo_settings_panel.generate {
+            self.demo_panel.generate();
+            self.demo_settings_panel.generate = false;
+        }
+        self.demo_panel.is_waypoint = self.demo_settings_panel.is_waypoint;
         self.demo_panel.update(ctx, _frame);
     }
     fn app_settings_panel(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {

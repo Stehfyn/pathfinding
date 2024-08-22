@@ -28,6 +28,10 @@ pub struct DemoSettingsPanel {
     dimensions: egui::Vec2,
     #[serde(skip)]
     env_settings: EnvironmentSettings,
+    #[serde(skip)]
+    pub generate: bool,
+    #[serde(skip)]
+    pub is_waypoint: bool,
 }
 
 impl Default for DemoSettingsPanel {
@@ -43,6 +47,8 @@ impl Default for DemoSettingsPanel {
             label: "🖧 Configure".to_owned(),
             dimensions: egui::vec2(400., 300.),
             env_settings: EnvironmentSettings::default(),
+            generate: false,
+            is_waypoint: true,
         }
     }
 }
@@ -220,15 +226,19 @@ impl Panel for DemoSettingsPanel {
                                             .trailing_fill(true),
                                         );
                                     });
+                                    if ui
+                                        .button(egui::RichText::new("generate").size(20.))
+                                        .clicked()
+                                    {
+                                        self.generate = true;
+                                    }
                                 });
                             });
                         });
                         self.env_settings.n = n;
                         ui.group(|ui| {
                             ui.vertical(|ui| {
-                                ui.radio(false, "A*");
-                                ui.radio(false, "Waypoint Generation");
-                                ui.radio(false, "Potential Fields");
+                                ui.checkbox(&mut self.is_waypoint, "Show Path");
                             });
                         });
                     });

@@ -145,6 +145,11 @@ pub struct DemoPanel {
 
     path_map: HashMap<usize, PathPromise>,
     current_paths: HashMap<usize, Vec<Pos2>>,
+
+    pub is_waypoint: bool,
+    timer: f32,
+
+    queued_points: Vec<Pos2>,
 }
 
 impl Default for DemoPanel {
@@ -171,7 +176,7 @@ impl Default for DemoPanel {
             obstacles: Vec::new(),
             space_lut: HashMap::default(),
             first_frame: true,
-            stretch: true,
+            stretch: false,
 
             navmesh: NavMesh::default(),
             start: Pos2::default(),
@@ -179,6 +184,9 @@ impl Default for DemoPanel {
             path: Vec::default(),
             path_map: HashMap::default(),
             current_paths: HashMap::default(),
+            is_waypoint: true,
+            timer: 0.5,
+            queued_points: Vec::default(),
         }
     }
 }
@@ -186,19 +194,6 @@ impl Default for DemoPanel {
 impl Panel for DemoPanel {
     #[allow(unused_variables)]
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        egui::Window::new("demo_panel")
-            .min_height(100.)
-            .min_height(100.)
-            .title_bar(false)
-            .show(ctx, |ui| {
-                if ui
-                    .button(egui::RichText::new("generate").size(20.))
-                    .clicked()
-                {
-                    self.generate = true;
-                }
-            });
-
         egui::CentralPanel::default().show(ctx, |ui| {
             let painter = egui::Painter::new(
                 ui.ctx().clone(),
@@ -221,6 +216,9 @@ impl Panel for DemoPanel {
 
 impl DemoPanel {
     pub fn set_env_settings(&mut self, new_settings: EnvironmentSettings) {
+        if (self.env_settings.stage != Stage::AStar) && (new_settings.stage == Stage::AStar) {
+            self.swap_to_a_star_stage();
+        }
         self.env_settings = new_settings;
     }
 }
@@ -270,7 +268,17 @@ impl DemoPanel {
                     }
                 }
 
-                plot_ui.points(path_markers);
+                self.timer -= plot_ui.ctx().input(|r| r.stable_dt);
+                if self.timer <= 0.0 {
+                    //advance entts
+                    self.move_entities();
+                    self.timer = 0.05;
+                }
+                if self.is_waypoint {
+                    plot_ui.points(path_markers);
+                } else {
+                    // move entts
+                }
 
                 if self.generate {
                     self.generate_obstacles();
@@ -535,6 +543,24 @@ impl DemoPanel {
         }
     }
 
+    fn move_entities(&mut self) {
+        unsafe {
+            for (id, path) in self.current_paths.iter_mut() {
+                let mut entt_opt = ENTITY_MANAGER.get_mut(id);
+                if let Some(entt) = entt_opt {
+                    for c in entt.components.iter_mut() {
+                        if let Component::Transform2(tc) = c {
+                            if let Some(pos) = path.first() {
+                                tc.get_mut().pos = *pos;
+                                path.remove(0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn draw_entities(&mut self, plot_ui: &mut egui_plot::PlotUi) {
         unsafe {
             let entities = ENTITY_MANAGER.iter();
@@ -674,6 +700,15 @@ impl DemoPanel {
             self.cursor_x = x;
             self.cursor_y = y;
 
+            plot_ui.ctx().input(|ui| {
+                if ui.pointer.button_clicked(egui::PointerButton::Middle) {
+                    self.queued_points.push(pos2::Pos2 {
+                        x: x as i64,
+                        y: y as i64,
+                    });
+                }
+            });
+
             plot_ui.ctx().input(|ui| unsafe {
                 if ui.pointer.primary_clicked() {
                     let entts = crate::ecs::entity::get_entities_from_xy(x, y);
@@ -734,6 +769,10 @@ impl DemoPanel {
 
         unsafe {
             let selected = get_selected();
+            if selected.len() > 0 {
+                self.queued_points.push(self.start);
+            }
+
             for s in selected.iter() {
                 if let Some(path_promise) = self.path_map.get_mut(s) {
                     // handle the Option
@@ -749,7 +788,9 @@ impl DemoPanel {
                                 _ => {}
                             }
                         }
+
                         path_promise.0 = self.navmesh.async_a_star(pos, self.start);
+
                         log::info!(
                             "{} ({}, {}) wants to go to ({}, {})",
                             s,
@@ -770,7 +811,12 @@ impl DemoPanel {
                             _ => {}
                         }
                     }
-                    let some_path_promise = self.navmesh.async_a_star(pos, self.start);
+
+                    log::info!("{}", self.queued_points.len());
+                    let some_path_promise = self
+                        .navmesh
+                        .async_waypointed_a_star(pos, self.queued_points.clone());
+
                     log::info!(
                         "{} ({}, {}) wants to go to ({}, {})",
                         s,
@@ -783,6 +829,20 @@ impl DemoPanel {
                         .insert(e.get_id(), PathPromise(some_path_promise));
                 }
             }
+            self.queued_points.clear();
         }
+    }
+}
+
+impl DemoPanel {
+    pub fn generate(&mut self) {
+        self.generate = true;
+    }
+    pub fn swap_to_a_star_stage(&mut self) {
+        self.space_lut.clear();
+        fill_lut_with_rectangle(&mut self.space_lut, 39., 37., 1., 12.); // mid
+        fill_lut_with_rectangle(&mut self.space_lut, 30., 40., 19., 0.); // bot
+        fill_lut_with_rectangle(&mut self.space_lut, 30., 49., 19., 0.); // top
+        self.navmesh.set_space_lut(self.space_lut.clone());
     }
 }

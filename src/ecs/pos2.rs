@@ -54,6 +54,22 @@ impl Pos2 {
                 x: self.x,
                 y: self.y - 1,
             },
+            Pos2 {
+                x: self.x - 1,
+                y: self.y - 1,
+            },
+            Pos2 {
+                x: self.x + 1,
+                y: self.y - 1,
+            },
+            Pos2 {
+                x: self.x - 1,
+                y: self.y + 1,
+            },
+            Pos2 {
+                x: self.x + 1,
+                y: self.y + 1,
+            },
         ]
     }
 }
