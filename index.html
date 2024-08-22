@@ -1,26 +1,30 @@
-<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<html>
 
-<!-- Disable zooming: -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+    <!-- Disable zooming: -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
 
     <!-- change this to your project name -->
     <title>eframe template</title>
 
     <!-- config for our rust wasm binary. go to https://trunkrs.dev/assets/#rust for more customization -->
-    <script type="module">import init from '/pathfinding/pathfinding-8ca9e0e7e51d15fa.js';init('/pathfinding/pathfinding-8ca9e0e7e51d15fa_bg.wasm');</script>
+    <script
+        type="module">import init from '/pathfinding-1a79edd5f059fcc9.js'; init('/pathfinding-1a79edd5f059fcc9_bg.wasm');</script>
     <!-- this is the base url relative to which other urls will be constructed. trunk will insert this from the public-url option -->
-    <base href="/pathfinding/">
+    <base href="/">
 
-    <link rel="icon" href="/pathfinding/favicon-f402c8741ce815ec.ico">
+    <link rel="icon" href="/favicon-f402c8741ce815ec.ico">
 
 
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
 
 
     <link rel="manifest" href="manifest.json">
@@ -114,8 +118,9 @@
         }
     </style>
 
-<link rel="preload" href="/pathfinding/pathfinding-8ca9e0e7e51d15fa_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
-<link rel="modulepreload" href="/pathfinding/pathfinding-8ca9e0e7e51d15fa.js"></head>
+    <link rel="preload" href="/pathfinding-1a79edd5f059fcc9_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
+    <link rel="modulepreload" href="/pathfinding-1a79edd5f059fcc9.js">
+</head>
 
 <body>
     <!-- The WASM code will resize the canvas dynamically -->
@@ -136,4 +141,6 @@
 
 
 
-</body></html><!-- Powered by egui: https://github.com/emilk/egui/ -->
+</body>
+
+</html><!-- Powered by egui: https://github.com/emilk/egui/ -->
